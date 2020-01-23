@@ -41,7 +41,6 @@ def random_alpha_vector(M):
     r = 2*M + 1
     vector = np.zeros(shape=r)
     vector[M] = rng.uniform(0, 1)
-
     for m in range(0, M):
         vector[m] = vector[r - m - 1] = 0.5*rng.uniform(0, np.sum(vector[m+1:r-m]))
 
