@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import sys
+import json
 
 
 def omega_criterion(function):
@@ -13,10 +14,18 @@ def omega_criterion(function):
 
 def delta_criterion(average_func, noised_func):
     sum = 0.
-    for k in range(1, average_func.size):
+    for k in range(0, average_func.size):
         sum += np.power(average_func[k] - noised_func[k], 2)
 
     return np.sqrt(np.divide(sum, average_func.size))
+
+
+def get_J(omega, delta, lam):
+    return (lam)*omega + (1 - lam)*delta
+
+
+def euclidean_distance(omega, delta):
+    return np.sqrt(np.power(omega, 2) + np.power(delta, 2))
 
 
 def norm_vector(vector):
@@ -25,12 +34,21 @@ def norm_vector(vector):
 
 
 def weighted_moving_average(function, M, alpha):
-    filtered_function = np.copy(function)
+    extended_function = np.copy(function)
+
+    dummy = np.array([0 for i in range(0, M)])
+    extended_function = np.append(dummy, extended_function)
+    extended_function = np.append(extended_function, dummy)
+
+    filtered_function = np.copy(extended_function)
+
     for k in range(M, filtered_function.size - M):
         sum = 0.
-        for j in range(k - M, k + M):
-            sum += np.multiply(np.power(filtered_function[j], 2), alpha[j + M + 1 - k])
+        for j in range(k - M, k + M + 1):
+            sum += np.multiply(np.power(filtered_function[j], 2), alpha[j + M - k])
         filtered_function[k] = np.sqrt(sum)
+
+    filtered_function = filtered_function[M:-M]
 
     return filtered_function
 
@@ -41,9 +59,8 @@ def random_alpha_vector(M):
     r = 2*M + 1
     vector = np.zeros(shape=r)
     vector[M] = rng.uniform(0, 1)
-
     for m in range(0, M):
-        vector[m] = vector[r - m - 1] = 0.5*rng.uniform(0, np.sum(vector[m+1:r-m]))
+        vector[m] = vector[-(m + 1)] = rng.uniform(0, 1)
 
     vector = norm_vector(vector)
 
@@ -63,13 +80,14 @@ def get_noised_function(function, noise_amplitude) :
 
 def get_filtered_function(function, M):
     best_lambda = 0
+    min_distance = sys.float_info.max
     best_alpha = None
-    min_J_value = sys.float_info.max
 
-    for lambda_index in range(0, 11):
-        lam = np.divide(lambda_index, 10)
-        J = lambda filtered, noised:     (lam) * omega_criterion(filtered) + \
-                                     (1 - lam) * delta_criterion(filtered, noised)
+    log_json = json.loads('[]')
+
+    for lam in np.linspace(0., 1., 11):
+        local_best_alpha = None
+        local_min_J_value = sys.float_info.max
 
         N = int(np.divide(np.log(1-0.95), np.log(1 - np.divide(0.01, np.pi))))
 
@@ -77,13 +95,42 @@ def get_filtered_function(function, M):
             alpha = random_alpha_vector(M)
             filtered_function = weighted_moving_average(function, M, alpha)
 
-            J_value = J(filtered_function, function)
-            if np.less(J_value, min_J_value):
-                min_J_value = J_value
-                best_lambda = lam
-                best_alpha = alpha
+            omega = omega_criterion(filtered_function)
+            delta = delta_criterion(function, filtered_function)
+            J_value = get_J(omega, delta, lam)
+            if np.less(J_value, local_min_J_value):
+                local_min_J_value = J_value
+                local_best_alpha = alpha
+
+        filtered_function = weighted_moving_average(function, M, local_best_alpha)
+
+        omega = omega_criterion(filtered_function)
+        delta = delta_criterion(filtered_function, function)
+        J_value = get_J(omega, delta, lam)
+        distance = euclidean_distance(omega, delta)
+
+        experement_log = json.loads('{}')
+        experement_log['lam'] = lam
+        experement_log['alpha'] = []
+        for item in local_best_alpha:
+            experement_log['alpha'].append(item)
+        experement_log['omega'] = omega
+        experement_log['delta'] = delta
+        experement_log['J'] = local_min_J_value
+        experement_log['distance'] = distance
+
+        log_json.append(experement_log)
+
+        print('lam :', lam, 'omega :', omega, 'delta :', delta, 'J :', J_value, 'distance :', distance)
+        if np.less(distance, min_distance):
+            best_lambda = lam
+            min_distance = distance
+            best_alpha = local_best_alpha
 
     print("Best lambda and alpha : ", best_lambda, best_alpha)
+
+
+    print(json.dumps(log_json, indent=4))
 
     return weighted_moving_average(function, alpha=best_alpha, M=M)
 
@@ -102,9 +149,15 @@ if __name__ == '__main__':
     plt.plot(x_array, source_function)
     plt.plot(x_array, noised_function)
     plt.plot(x_array, filtered_function3)
+
+    plt.legend(['source function', 'noised function', 'filtered function (r = 3)'])
+
     plt.show()
 
     plt.plot(x_array, source_function)
     plt.plot(x_array, noised_function)
     plt.plot(x_array, filtered_function5)
+
+    plt.legend(['source function', 'noised function', 'filtered function (r = 5)'])
+
     plt.show()
